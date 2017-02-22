@@ -7,6 +7,7 @@
     android:paddingLeft="@dimen/activity_horizontal_margin"
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingTop="@dimen/activity_vertical_margin"
+    android:layout_centerHorizontal="true"
     tools:context="com.qlgc.udpreceiver.MainActivity">
 
     <TextView
@@ -19,5 +20,99 @@
         android:textAlignment="center"
         android:textColor="#f408f8"
         android:textSize="20sp" />
+
+    <LinearLayout
+        android:id="@+id/linearLayout1"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:layout_below="@+id/textView"
+        android:layout_marginTop="40dp" >
+
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Start"
+            android:id="@+id/startButton"
+            android:onClick="startListening" />
+
+        <Button
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Finish"
+            android:id="@+id/finishButton"
+            android:onClick="finishListening"/>
+
+    </LinearLayout>
+
+
+    <LinearLayout
+        android:id="@+id/linearLayout2"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:layout_below="@+id/linearLayout1"
+        android:layout_marginTop="40dp" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sampling rate:"
+            android:id="@+id/textViewFs"
+            android:textAlignment="center"
+            android:textSize="20sp" />
+
+        <Spinner
+            android:id="@+id/spinnerFs"
+            android:layout_width="120dp"
+            android:layout_height="wrap_content" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/linearLayout3"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:layout_below="@+id/linearLayout2"
+        android:layout_marginTop="40dp" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Listening port:"
+            android:id="@+id/textViewPort"
+            android:textAlignment="center"
+            android:textSize="20sp" />
+
+        <EditText android:id="@+id/editPort"
+            android:layout_width="120dp"
+            android:layout_height="wrap_content"
+            android:hint="9001" />
+
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:text="My IP address is"
+        android:id="@+id/textView2"
+        android:layout_marginBottom="80dp"
+        android:layout_alignParentBottom="true"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:textAppearance="?android:attr/textAppearanceLarge"
+        android:text="255.255.255.255"
+        android:id="@+id/textViewIP"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="40dp" />
 
 </RelativeLayout>
