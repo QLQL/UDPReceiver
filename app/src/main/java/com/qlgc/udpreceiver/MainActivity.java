@@ -35,12 +35,12 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String IP_ADDRESS = "192.168.0.7";//"131.227.95.234";//"10.64.8.78"; // the sender's ip address to test reach or not
     private boolean Server_aktiv = false;
-    private boolean playMode = true;
+    private boolean playMode = false;
     private TextView textView, textViewIP;
 
-    private int port = 50007; // The default receiving port
+    private int port = 5001; // The default receiving port
 
-    public static int sampleRate = 48000;//44100;
+    public static int sampleRate = 16000;//44100;
     private int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
     AudioTrack player;
     private int playBufSize;// = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, audioFormat);
@@ -54,6 +54,8 @@ public class MainActivity extends AppCompatActivity {
         String myIPAdress = Formatter.formatIpAddress(wm.getConnectionInfo().getIpAddress());
         textViewIP = (TextView) findViewById(R.id.textViewIP);
         textViewIP.setText(myIPAdress);
+
+        textView = (TextView) findViewById(R.id.textView);
 
         Spinner spinner = (Spinner) findViewById(R.id.spinnerFs);
         // Create an ArrayAdapter using the string array and a default spinner layout
@@ -83,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
     /** Called when the user clicks the Start button */
     public void startListening(View view) {
         // Do something in response
-        TextView textView = (TextView) findViewById(R.id.textView);
+        //        TextView textView = (TextView) findViewById(R.id.textView);
         textView.setText("Start Listening......");
 
         //        //Receiver Side:
@@ -115,7 +117,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void finishListening(View view) {
         // Do something in response
-        TextView textView = (TextView) findViewById(R.id.textView);
+        // TextView textView = (TextView) findViewById(R.id.textView);
         textView.setText("Finish Listening......");
 
 
@@ -176,7 +178,7 @@ public class MainActivity extends AppCompatActivity {
                     DatagramSocket ds = channel.socket();// <-- create an unbound socket first
                     ds.setReuseAddress(true);
                     ds.bind(new InetSocketAddress(port)); // <-- now bind it
-                    ds.setSoTimeout(2000);
+                    ds.setSoTimeout(100);
 
                     DatagramPacket dp = new DatagramPacket(message, message.length);
                     while (Server_aktiv){
