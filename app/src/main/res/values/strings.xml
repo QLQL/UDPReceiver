@@ -1,9 +1,9 @@
 <resources>
     <string name="app_name">UDP Receiver</string>
     <string-array name="Fs_array">
-        <item>8 kHz</item>
+        <item>48 kHz</item>
         <item>16 kHz</item>
         <item>44.1 kHz</item>
-        <item>48 kHz</item>
+        <item>8 kHz</item>
     </string-array>
 </resources>

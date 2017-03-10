@@ -35,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String IP_ADDRESS = "192.168.0.7";//"131.227.95.234";//"10.64.8.78"; // the sender's ip address to test reach or not
     private boolean Server_aktiv = false;
-    private boolean playMode = false;
+    private boolean playMode = true;
     private TextView textView, textViewIP;
 
     private int port = 5001; // The default receiving port
@@ -44,6 +44,18 @@ public class MainActivity extends AppCompatActivity {
     private int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
     AudioTrack player;
     private int playBufSize;// = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, audioFormat);
+
+    private boolean receiveMode = false; // the app begins to receive data streaming
+    //private byte[] totalByteBuffer =  new byte[65536];
+    //private int totalByteBufferLen = totalByteBuffer.length;
+    private short[] totalShortBuffer =  new short[65536];
+    private int totalShortBufferLen = totalShortBuffer.length;
+
+    private int receiveOffset = 0;
+    private int playerOffset = 0;
+    private int batchN = 1920;
+    //private byte[] writeBufferBatch = new byte[batchN];
+    private short[] writeBufferBatch = new short[batchN];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -108,7 +120,6 @@ public class MainActivity extends AppCompatActivity {
         Server_aktiv = true;
         udpListening();
 
-
         Button startButton = (Button) findViewById(R.id.startButton);
         startButton.setEnabled(false);
         Button finishButton = (Button) findViewById(R.id.finishButton);
@@ -163,6 +174,7 @@ public class MainActivity extends AppCompatActivity {
                         player.setPlaybackRate(sampleRate);
                         Log.w("VS", "Player initialized");
                         player.play();
+                        //writeBuffer(); // started another thread to buffer data to the player
                     }
 
                     int Frame = 0;
@@ -183,6 +195,7 @@ public class MainActivity extends AppCompatActivity {
                     DatagramPacket dp = new DatagramPacket(message, message.length);
                     while (Server_aktiv){
                         try {
+                            long startTime = System.nanoTime();
                             Log.w("UDP", "Try to receive data");
                             ds.receive(dp);
                             //Log.d("Udp","Roger, received");
@@ -214,12 +227,53 @@ public class MainActivity extends AppCompatActivity {
 //                                Log.w("UDP", "C:  short1: " + Arrays.toString(Arrays.copyOfRange(shortBuffer, 0, 50)));
 //                                Log.w("UDP", "C:  short2: " + Arrays.toString(Arrays.copyOfRange(shortBuffer2, 0, 50)));
 //                                Log.w("UDP", "C: read in: " + Arrays.toString(Arrays.copyOfRange(buffer, 0, 50)));
-                                if (playMode) {
-                                    player.write(shortBuffer, 0, shortBuffer.length);
+//                                if (playMode) {
+//                                    player.write(shortBuffer, 0, shortBuffer.length);
+//                                }
+//
+//                                if (playMode) {
+//                                    player.write(buffer, 0, buffer.length);
+//                                }
+
+                                if (receiveOffset+shortBuffer.length>totalShortBufferLen){
+                                    int L = totalShortBufferLen-receiveOffset;
+                                    System.arraycopy(shortBuffer, 0, totalShortBuffer, receiveOffset, L);
+                                    System.arraycopy(shortBuffer, L, totalShortBuffer, 0, shortBuffer.length-L);
+                                } else {
+                                    System.arraycopy(shortBuffer, 0, totalShortBuffer, receiveOffset, shortBuffer.length);
                                 }
+                                receiveOffset += shortBuffer.length;
+                                if (receiveOffset>=totalShortBufferLen){ receiveOffset -= totalShortBufferLen;}
+
+                                if (playMode) {
+                                    player.write(shortBuffer, 0, shortBuffer.length, AudioTrack.WRITE_NON_BLOCKING);
+                              }
                             }
 
 
+
+
+
+                            // transfer the data to the totalByteBuffer
+//                            if (receiveOffset+buffer.length>totalByteBufferLen){
+//                                int L = totalByteBufferLen-receiveOffset;
+//                                System.arraycopy(buffer, 0, totalByteBuffer, receiveOffset, L);
+//                                System.arraycopy(buffer, L, totalByteBuffer, 0, buffer.length-L);
+//                            } else {
+//                                System.arraycopy(buffer, 0, totalByteBuffer, receiveOffset, buffer.length);
+//                            }
+//                            for (int i=0;i<buffer.length;i++){
+//                                int tmp = i+receiveOffset;
+//                                if (tmp>=totalByteBufferLen){ tmp -= totalByteBufferLen;}
+//                                totalByteBuffer[tmp] = buffer[i];
+//                            }
+
+//                            receiveOffset += buffer.length;
+//                            if (receiveOffset>=totalByteBufferLen){ receiveOffset -= totalByteBufferLen;}
+
+
+                            // did get time in the time slot allowed
+                            receiveMode = true;
 
 
                             // show the frame number and the length in the screen
@@ -231,8 +285,13 @@ public class MainActivity extends AppCompatActivity {
                                 }
                             });
 
+                            long endTime = System.nanoTime();
+                            long duration = (endTime - startTime);
+                            Log.w("UDP","receive data time "+String.valueOf(duration/1000000.0));
+
                         } catch (SocketTimeoutException e) {
-                            // resend
+                            // didn't get time in the time slot allowed
+                            receiveMode = false;
                             Log.w("Test","Continue to listen");
                             continue;
                         } catch (IOException e) {
@@ -240,8 +299,11 @@ public class MainActivity extends AppCompatActivity {
                             e.printStackTrace();
                         }
                     }
+                    receiveMode = false;
                     ds.close();
                     if (playMode){
+                        player.flush();
+                        player.stop();
                         player.release();
                         Log.d("VS","Player released");
                     }
@@ -258,6 +320,99 @@ public class MainActivity extends AppCompatActivity {
         udpListenStartThread.start();
     }
 
+    public void writeBuffer()
+    {
 
+        //final Handler handler = new Handler();
+        Thread writeBufferStartThread = new Thread(new Runnable() {
+
+            @Override
+            public void run() {
+                // pause the programme for 1ooo milliseconds
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                }
+
+
+
+                try {
+
+                    player = new AudioTrack(AudioManager.STREAM_MUSIC,
+                            sampleRate,
+                            AudioFormat.CHANNEL_OUT_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT,
+                            batchN*16,//playBufSize,
+                            AudioTrack.MODE_STREAM);
+                    player.setPlaybackRate(sampleRate);
+                    Log.w("VS", "Player initialized");
+                    player.play();
+
+
+                    while (Server_aktiv){
+                        // If receiveMode, the data is streaming in, we will push them to the buffer. Otherwise, wait
+                        while (receiveMode){
+                            long startTime = System.nanoTime();
+
+//                            if (playerOffset+batchN>totalByteBufferLen){
+//                                int L = totalByteBufferLen-playerOffset;
+//                                System.arraycopy(totalByteBuffer, playerOffset, writeBufferBatch, 0, L);
+//                                System.arraycopy(totalByteBuffer, 0, writeBufferBatch, L, batchN-L);
+//                            } else {
+//                                System.arraycopy(totalByteBuffer, playerOffset, writeBufferBatch, 0, batchN);
+//                            }
+                            if (playerOffset+batchN>totalShortBufferLen){
+                                int L = totalShortBufferLen-playerOffset;
+                                System.arraycopy(totalShortBuffer, playerOffset, writeBufferBatch, 0, L);
+                                System.arraycopy(totalShortBuffer, 0, writeBufferBatch, L, batchN-L);
+                            } else {
+                                System.arraycopy(totalShortBuffer, playerOffset, writeBufferBatch, 0, batchN);
+                            }
+//                            for (int i=0;i<batchN;i++){
+//                                int tmp = i+receiveOffset;
+//                                if (tmp>=totalByteBufferLen){ tmp -= totalByteBufferLen;}
+//                                writeBufferBatch[i] = totalByteBuffer[tmp];
+//                            }
+                            int playbufferflag = player.write(writeBufferBatch, 0, batchN, AudioTrack.WRITE_NON_BLOCKING);
+                            try {
+                                Thread.sleep(40);
+                            } catch (InterruptedException e1) {
+                                // TODO Auto-generated catch block
+                                e1.printStackTrace();
+                            }
+                            playerOffset += batchN;
+                            // if (playerOffset>=totalByteBufferLen){ playerOffset -= totalByteBufferLen;}
+                            if (playerOffset>=totalShortBufferLen){ playerOffset -= totalShortBufferLen;}
+                            long endTime = System.nanoTime();
+                            long duration = (endTime - startTime);
+                            Log.w("Player","send data to the player "+String.valueOf(duration/1000000.0)+"======"+String.valueOf(playbufferflag));
+                        }
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException e1) {
+                            // TODO Auto-generated catch block
+                            e1.printStackTrace();
+                        }
+
+                    }
+                    player.flush();
+                    player.stop();
+                    player.release();
+                    Log.d("VS","Player released");
+                } catch (Exception e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+
+            }
+
+        });
+
+        //start the listener
+//        writeBufferStartThread.setPriority(Thread.MAX_PRIORITY);
+        writeBufferStartThread.start();
+    }
 
 }
