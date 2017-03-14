@@ -28,6 +28,8 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.channels.DatagramChannel;
 import java.util.Arrays;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -53,9 +55,20 @@ public class MainActivity extends AppCompatActivity {
 
     private int receiveOffset = 0;
     private int playerOffset = 0;
-    private int batchN = 1920;
-    //private byte[] writeBufferBatch = new byte[batchN];
-    private short[] writeBufferBatch = new short[batchN];
+    //private int batchN = 1920;
+    private short[] writeBufferBatch;
+
+    private short[] shortBufferPlay1 = new short[10000];
+    private short[] shortBufferPlay2 = new short[10000];
+    private int timeFrame;
+    private int batchN;
+    private int playFlag=1; // which buffer to play
+
+
+    private short sendFrameN; // The first received sampled is the descriptor of the real frame index
+
+    Timer timer;
+    TimerTask timerTask;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -134,6 +147,19 @@ public class MainActivity extends AppCompatActivity {
 
         Server_aktiv = false;
 
+        //stop the timer, if it's not already null
+        if (timer != null) {
+            timer.cancel();
+            timer = null;
+        }
+
+        if (playMode) {
+            player.flush();
+            player.stop();
+            player.release();
+            Log.d("VS","Player released");
+        }
+
 
         Button startButton = (Button) findViewById(R.id.startButton);
         startButton.setEnabled(true);
@@ -149,6 +175,7 @@ public class MainActivity extends AppCompatActivity {
     {
 
         final Handler handler = new Handler();
+
         Thread udpListenStartThread = new Thread(new Runnable() {
 
             @Override
@@ -190,7 +217,7 @@ public class MainActivity extends AppCompatActivity {
                     DatagramSocket ds = channel.socket();// <-- create an unbound socket first
                     ds.setReuseAddress(true);
                     ds.bind(new InetSocketAddress(port)); // <-- now bind it
-                    ds.setSoTimeout(100);
+                    ds.setSoTimeout(250);
 
                     DatagramPacket dp = new DatagramPacket(message, message.length);
                     while (Server_aktiv){
@@ -204,13 +231,13 @@ public class MainActivity extends AppCompatActivity {
 
                             // byte to short
                             byte[] buffer = dp.getData();
-                            int Sample  = buffer.length/2;
+                            batchN  = dp.getLength()/2;
                             short LSB, MSB;
                             short shortrecover;
-                            if (Sample>1){
-                                short[] shortBuffer = new short[Sample];
+                            if (batchN>1){
+                                short[] shortBuffer = new short[batchN];
 //                                short[] shortBuffer2 = new short[Sample];
-                                for (int i=0;i<Sample;i++){
+                                for (int i=0;i<batchN;i++){
                                     LSB = (short) buffer[i*2];
                                     MSB = (short) buffer[i*2+1];
 //                                    if (LSB<0){
@@ -224,6 +251,9 @@ public class MainActivity extends AppCompatActivity {
                                     shortrecover = (short) ( (MSB<<8) | LSB&0xFF );
                                     shortBuffer[i] = shortrecover;
                                 }
+
+
+
 //                                Log.w("UDP", "C:  short1: " + Arrays.toString(Arrays.copyOfRange(shortBuffer, 0, 50)));
 //                                Log.w("UDP", "C:  short2: " + Arrays.toString(Arrays.copyOfRange(shortBuffer2, 0, 50)));
 //                                Log.w("UDP", "C: read in: " + Arrays.toString(Arrays.copyOfRange(buffer, 0, 50)));
@@ -235,6 +265,9 @@ public class MainActivity extends AppCompatActivity {
 //                                    player.write(buffer, 0, buffer.length);
 //                                }
 
+                                Log.w("UDP", "The real sending frame number is " + Short.toString(shortBuffer[0]));
+                                shortBuffer[0] = shortBuffer[1];
+
                                 if (receiveOffset+shortBuffer.length>totalShortBufferLen){
                                     int L = totalShortBufferLen-receiveOffset;
                                     System.arraycopy(shortBuffer, 0, totalShortBuffer, receiveOffset, L);
@@ -245,32 +278,57 @@ public class MainActivity extends AppCompatActivity {
                                 receiveOffset += shortBuffer.length;
                                 if (receiveOffset>=totalShortBufferLen){ receiveOffset -= totalShortBufferLen;}
 
-                                if (playMode) {
-                                    player.write(shortBuffer, 0, shortBuffer.length, AudioTrack.WRITE_NON_BLOCKING);
-                              }
+
+
+
+//                                if (playFlag==1) {
+//                                    System.arraycopy(shortBuffer, 0, shortBufferPlay2, 0, N);
+//                                    playFlag=2;
+//                                } else {
+//                                    System.arraycopy(shortBuffer, 0, shortBufferPlay1, 0, N);
+//                                    playFlag=1;
+//                                }
+
+                                //schedule the timer, after the first 1000ms the TimerTask will run every 40ms
+                                if (Frame==1) {
+                                    //set a new Timer
+                                    timer = new Timer();
+                                    writeBufferBatch = new short[batchN];
+                                    //initialize the TimerTask's job
+                                    timerTask = new TimerTask() {
+                                        public void run() {
+                                            // The following works for only API 23 and above
+                                            if (playMode & receiveMode) {
+//                                                if (playFlag == 1) {
+//                                                    player.write(shortBufferPlay1, 0, N, AudioTrack.WRITE_NON_BLOCKING);
+//                                                } else {
+//                                                    player.write(shortBufferPlay2, 0, N, AudioTrack.WRITE_NON_BLOCKING);
+//                                                }
+
+                                                if (playerOffset+batchN>totalShortBufferLen){
+                                                    int L = totalShortBufferLen-playerOffset;
+                                                    System.arraycopy(totalShortBuffer, playerOffset, writeBufferBatch, 0, L);
+                                                    System.arraycopy(totalShortBuffer, 0, writeBufferBatch, L, batchN-L);
+                                                } else {
+                                                    System.arraycopy(totalShortBuffer, playerOffset, writeBufferBatch, 0, batchN);
+                                                }
+
+                                                player.write(writeBufferBatch, 0, batchN, AudioTrack.WRITE_NON_BLOCKING);
+                                                playerOffset += batchN;
+                                                if (playerOffset>=totalShortBufferLen){ playerOffset -= totalShortBufferLen;}
+                                            }
+
+                                        }
+                                    };
+
+                                    long tmp = (long) 1000.0*batchN/sampleRate;
+                                    timer.schedule(timerTask, 1000, tmp); //
+                                }
+
+//                                if (playMode) {
+//                                    player.write(shortBuffer, 0, shortBuffer.length, AudioTrack.WRITE_NON_BLOCKING);
+//                                }
                             }
-
-
-
-
-
-                            // transfer the data to the totalByteBuffer
-//                            if (receiveOffset+buffer.length>totalByteBufferLen){
-//                                int L = totalByteBufferLen-receiveOffset;
-//                                System.arraycopy(buffer, 0, totalByteBuffer, receiveOffset, L);
-//                                System.arraycopy(buffer, L, totalByteBuffer, 0, buffer.length-L);
-//                            } else {
-//                                System.arraycopy(buffer, 0, totalByteBuffer, receiveOffset, buffer.length);
-//                            }
-//                            for (int i=0;i<buffer.length;i++){
-//                                int tmp = i+receiveOffset;
-//                                if (tmp>=totalByteBufferLen){ tmp -= totalByteBufferLen;}
-//                                totalByteBuffer[tmp] = buffer[i];
-//                            }
-
-//                            receiveOffset += buffer.length;
-//                            if (receiveOffset>=totalByteBufferLen){ receiveOffset -= totalByteBufferLen;}
-
 
                             // did get time in the time slot allowed
                             receiveMode = true;
@@ -295,18 +353,19 @@ public class MainActivity extends AppCompatActivity {
                             Log.w("Test","Continue to listen");
                             continue;
                         } catch (IOException e) {
+                            receiveMode = false;
                             Log.e(" UDP ", "error");
                             e.printStackTrace();
                         }
                     }
                     receiveMode = false;
                     ds.close();
-                    if (playMode){
-                        player.flush();
-                        player.stop();
-                        player.release();
-                        Log.d("VS","Player released");
-                    }
+//                    if (playMode){
+//                        player.flush();
+//                        player.stop();
+//                        player.release();
+//                        Log.d("VS","Player released");
+//                    }
                 } catch (IOException e) {
                     // TODO Auto-generated catch block
                     e.printStackTrace();
